@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
-import cookieSession from 'cookie-session';
+import cookieSessionModule from 'cookie-session';
+const cookieSession = cookieSessionModule.default || cookieSessionModule;
 import axios from 'axios';
 import path from 'path';
 import { fileURLToPath } from 'url';
