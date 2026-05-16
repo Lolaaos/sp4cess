@@ -20,21 +20,16 @@ const Navbar = ({ user, isAdmin, cartCount, onOpenCart }) => {
   }, []);
 
   return (
-    <nav className={`glass ${scrolled ? 'nav-scrolled' : ''}`} style={{ 
-      position: 'fixed', top: scrolled ? 10 : 20, left: '50%', transform: 'translateX(-50%)', 
-      width: '95%', maxWidth: '1200px', zIndex: 1000, padding: '12px 25px', 
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      transition: 'all 0.4s ease'
-    }}>
-      <Link to="/" style={{ fontSize: '1.6rem', fontWeight: 900, textDecoration: 'none', color: 'white' }}>SP4<span style={{ color: 'var(--primary)' }}>CE</span></Link>
+    <nav className={`glass navbar ${scrolled ? 'nav-scrolled' : ''}`}>
+      <Link to="/" className="nav-brand" style={{ fontSize: '1.6rem', fontWeight: 900, textDecoration: 'none', color: 'white' }}>SP4<span style={{ color: 'var(--primary)' }}>CE</span></Link>
       
-      <div style={{ display: 'flex', gap: '30px', alignItems: 'center' }}>
+      <div className="nav-links">
         <Link to="/" style={{ color: pathname === '/' ? 'var(--primary)' : 'white', textDecoration: 'none', fontWeight: 700, fontSize: '0.9rem' }}>Inicio</Link>
         <Link to="/productos" style={{ color: pathname === '/productos' ? 'var(--primary)' : 'white', textDecoration: 'none', fontWeight: 700, fontSize: '0.9rem' }}>Tienda</Link>
         {isAdmin && <Link to="/admin" style={{ color: pathname === '/admin' ? 'var(--primary)' : 'white', textDecoration: 'none', fontWeight: 700, fontSize: '0.9rem' }}>Admin</Link>}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+      <div className="nav-user">
         {user && (
           <button onClick={onOpenCart} style={{ background: 'none', border: 'none', color: 'white', position: 'relative', cursor: 'pointer', padding: '5px' }}>
             <ShoppingBag size={22} />
@@ -45,7 +40,7 @@ const Navbar = ({ user, isAdmin, cartCount, onOpenCart }) => {
         )}
         {user ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            <div style={{ textAlign: 'right' }}>
+            <div className="user-info-text" style={{ textAlign: 'right' }}>
               <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>{user.username}</div>
               <div style={{ fontSize: '0.65rem', color: 'var(--primary)', opacity: 0.8 }}>ID: {user.id}</div>
             </div>
@@ -166,7 +161,7 @@ const TeamCard = ({ member, user, onLike }) => {
           <span style={{ color: 'var(--primary)', fontWeight: 800, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '2px' }}>{member.role}</span>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginBottom: '30px' }}>
+        <div className="team-card-buttons">
           {user ? (
             <motion.button 
               whileTap={{ scale: 0.9 }}
@@ -237,7 +232,7 @@ const ProductModal = ({ product, user, currency = 'USD', onClose, onAddToCart })
       style={{ width: '100%', maxWidth: '900px', maxHeight: '90vh', overflowY: 'auto', padding: '40px', position: 'relative' }}>
       <X onClick={onClose} style={{ position: 'absolute', top: 25, right: 25, cursor: 'pointer', color: 'var(--text-gray)' }} size={24} />
       
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '40px' }}>
+      <div className="product-modal-grid">
         <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '15px', overflow: 'hidden', height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <img src={product.image} style={{ width: '100%', height: '100%', objectFit: 'contain', padding: '20px' }} />
         </div>
@@ -418,7 +413,7 @@ export default function App() {
                     <span style={{ color: 'var(--primary)', fontWeight: 900, letterSpacing: '6px', fontSize: '1rem', textTransform: 'uppercase' }}>Elite Gaming Marketplace</span>
                     <h1 style={{ fontSize: 'clamp(3rem, 10vw, 6rem)', fontWeight: 900, lineHeight: 1, margin: '25px 0 30px' }}>SP4<span style={{ color: 'var(--primary)' }}>CE</span> STORE</h1>
                     <p style={{ fontSize: '1.25rem', color: 'var(--text-gray)', maxWidth: '750px', margin: '0 auto 50px' }}>Activos digitales exclusivos, seguridad garantizada y entrega inmediata. Liderando la industria desde 2024.</p>
-                    <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+                    <div className="hero-buttons">
                       <a href="#catalogo" className="btn-primary" style={{ padding: '18px 40px' }}>VER CATÁLOGO <ArrowRight size={20}/></a>
                       <a href="#team" className="btn-outline" style={{ padding: '18px 40px' }}>NUESTRO EQUIPO</a>
                     </div>
@@ -510,6 +505,9 @@ export default function App() {
           } />
 
           <Route path="/admin" element={isAdmin ? <AdminPanel products={products} coupons={coupons} currency={currency} onRefresh={fetchData} /> : <div style={{ paddingTop: '200px', textAlign: 'center' }}><h2>Acceso Denegado</h2><Link to="/" className="btn-primary" style={{ display: 'inline-block', marginTop: '20px', padding: '10px 30px' }}>Volver al Inicio</Link></div>} />
+          <Route path="/terminos" element={<Terminos />} />
+          <Route path="/privacidad" element={<Privacidad />} />
+          <Route path="/faq" element={<Faq />} />
         </Routes>
       </main>
 
@@ -540,7 +538,7 @@ const CartDrawer = ({ cart, setCart, coupons, currency = 'USD', onPurchase, onCl
 
   return (
     <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25 }} 
-      style={{ position: 'fixed', top: 0, right: 0, width: 'min(450px, 100%)', height: '100%', zIndex: 4000, padding: '40px', display: 'flex', flexDirection: 'column' }} className="glass">
+      className="glass cart-drawer">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '40px' }}>
         <h2 style={{ fontWeight: 900, fontSize: '1.8rem' }}>CARRITO</h2>
         <X onClick={onClose} style={{ cursor: 'pointer', opacity: 0.6 }} />
@@ -654,7 +652,7 @@ const AdminPanel = ({ products, coupons, currency, onRefresh }) => {
       <div className="glass" style={{ padding: '40px' }}>
         <h2 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '40px' }}>PANEL DE <span style={{ color: 'var(--primary)' }}>ADMINISTRACIÓN</span></h2>
         
-        <div style={{ display: 'flex', gap: '20px', marginBottom: '40px', flexWrap: 'wrap' }}>
+        <div className="admin-tabs">
           <button onClick={() => setActiveTab('products')} className={activeTab === 'products' ? 'btn-primary' : 'btn-outline'} style={{ padding: '12px 30px' }}>PRODUCTOS</button>
           <button onClick={() => setActiveTab('coupons')} className={activeTab === 'coupons' ? 'btn-primary' : 'btn-outline'} style={{ padding: '12px 30px' }}>CUPONES</button>
           <button onClick={() => setActiveTab('settings')} className={activeTab === 'settings' ? 'btn-primary' : 'btn-outline'} style={{ padding: '12px 30px' }}>AJUSTES</button>
@@ -694,13 +692,13 @@ const AdminPanel = ({ products, coupons, currency, onRefresh }) => {
 
         {activeTab === 'products' && (
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px', background: 'rgba(255,255,255,0.02)', padding: '30px', borderRadius: '15px' }}>
-              <div style={{ gridColumn: 'span 1' }}><label>Nombre</label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="form-input" /></div>
-              <div style={{ gridColumn: 'span 1' }}><label>Precio ($)</label><input type="number" value={form.price} onChange={e => setForm({...form, price: e.target.value})} className="form-input" /></div>
-              <div style={{ gridColumn: 'span 1' }}><label>Stock</label><input type="number" value={form.stock} onChange={e => setForm({...form, stock: e.target.value})} className="form-input" /></div>
-              <div style={{ gridColumn: 'span 3' }}><label>URL Imagen</label><input value={form.image} onChange={e => setForm({...form, image: e.target.value})} className="form-input" /></div>
-              <div style={{ gridColumn: 'span 3' }}><label>Descripción</label><textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="form-input" style={{ height: '100px' }} /></div>
-              <div style={{ gridColumn: 'span 3' }}><button onClick={saveProduct} className="btn-primary" style={{ width: '100%', padding: '15px' }}>{editingId ? 'ACTUALIZAR PRODUCTO' : 'CREAR PRODUCTO'}</button></div>
+            <div className="form-grid">
+              <div className="col-span-1"><label>Nombre</label><input value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="form-input" /></div>
+              <div className="col-span-1"><label>Precio ($)</label><input type="number" value={form.price} onChange={e => setForm({...form, price: e.target.value})} className="form-input" /></div>
+              <div className="col-span-1"><label>Stock</label><input type="number" value={form.stock} onChange={e => setForm({...form, stock: e.target.value})} className="form-input" /></div>
+              <div className="col-span-3"><label>URL Imagen</label><input value={form.image} onChange={e => setForm({...form, image: e.target.value})} className="form-input" /></div>
+              <div className="col-span-3"><label>Descripción</label><textarea value={form.description} onChange={e => setForm({...form, description: e.target.value})} className="form-input" style={{ height: '100px' }} /></div>
+              <div className="col-span-3"><button onClick={saveProduct} className="btn-primary" style={{ width: '100%', padding: '15px' }}>{editingId ? 'ACTUALIZAR PRODUCTO' : 'CREAR PRODUCTO'}</button></div>
             </div>
 
             <div style={{ display: 'grid', gap: '15px' }}>
@@ -819,10 +817,10 @@ const CouponManager = ({ coupons, onRefresh }) => {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '40px', background: 'rgba(255,255,255,0.02)', padding: '30px', borderRadius: '15px' }}>
-        <div style={{ flex: 2 }}><label>Código</label><input value={code} onChange={e => setCode(e.target.value.toUpperCase())} className="form-input" placeholder="EJ: PROMO50" /></div>
-        <div style={{ flex: 1 }}><label>Descuento (%)</label><input type="number" value={discount} onChange={e => setDiscount(e.target.value)} className="form-input" placeholder="50" /></div>
-        <div style={{ display: 'flex', alignItems: 'flex-end' }}><button onClick={save} className="btn-primary" style={{ padding: '15px 40px' }}>CREAR CUPÓN</button></div>
+      <div className="coupon-form">
+        <div><label>Código</label><input value={code} onChange={e => setCode(e.target.value.toUpperCase())} className="form-input" placeholder="EJ: PROMO50" /></div>
+        <div><label>Descuento (%)</label><input type="number" value={discount} onChange={e => setDiscount(e.target.value)} className="form-input" placeholder="50" /></div>
+        <div><button onClick={save} className="btn-primary" style={{ padding: '15px 40px' }}>CREAR CUPÓN</button></div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '20px' }}>
@@ -840,6 +838,113 @@ const CouponManager = ({ coupons, onRefresh }) => {
   );
 };
 
+// --- LEGAL & FAQ COMPONENTS ---
+const Terminos = () => (
+  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="container" style={{ paddingTop: '180px', paddingBottom: '100px' }}>
+    <div className="glass" style={{ padding: '40px', maxWidth: '900px', margin: '0 auto' }}>
+      <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '20px', color: 'var(--primary)', textAlign: 'center' }}>Términos y Condiciones</h1>
+      <div className="underline" style={{ marginBottom: '40px' }}></div>
+      <div style={{ color: 'var(--text-gray)', lineHeight: 1.8, display: 'flex', flexDirection: 'column', gap: '25px' }}>
+        <section>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.3rem' }}>1. Aceptación de los Términos</h3>
+          <p>Al acceder y utilizar SP4CE Store, aceptas estar sujeto a estos Términos y Condiciones. Si no estás de acuerdo con alguna parte de estos términos, no podrás utilizar nuestros servicios.</p>
+        </section>
+        <section>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.3rem' }}>2. Productos y Activos Digitales</h3>
+          <p>Todos los productos ofrecidos en SP4CE Store son activos digitales. Nos esforzamos por describir y mostrar los productos con la mayor precisión posible. Sin embargo, no garantizamos que las descripciones sean 100% libres de errores.</p>
+        </section>
+        <section>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.3rem' }}>3. Proceso de Compra y Pagos</h3>
+          <p>Las transacciones se procesan de forma segura. Al confirmar un pedido, te comprometes a realizar el pago correspondiente a través de los métodos autorizados por nuestros administradores.</p>
+        </section>
+        <section>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.3rem' }}>4. Política de Reembolsos</h3>
+          <p>Debido a la naturaleza digital de nuestros productos, todas las ventas son definitivas. No se emitirán reembolsos una vez que el activo digital haya sido entregado y verificado.</p>
+        </section>
+        <section>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.3rem' }}>5. Modificaciones</h3>
+          <p>Nos reservamos el derecho de modificar estos términos en cualquier momento. Los cambios entrarán en vigor inmediatamente después de su publicación en el sitio web.</p>
+        </section>
+      </div>
+      <div style={{ textAlign: 'center', marginTop: '50px' }}>
+        <Link to="/" className="btn-primary" style={{ display: 'inline-flex', padding: '12px 35px' }}>Volver al Inicio</Link>
+      </div>
+    </div>
+  </motion.div>
+);
+
+const Privacidad = () => (
+  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="container" style={{ paddingTop: '180px', paddingBottom: '100px' }}>
+    <div className="glass" style={{ padding: '40px', maxWidth: '900px', margin: '0 auto' }}>
+      <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '20px', color: 'var(--primary)', textAlign: 'center' }}>Política de Privacidad</h1>
+      <div className="underline" style={{ marginBottom: '40px' }}></div>
+      <div style={{ color: 'var(--text-gray)', lineHeight: 1.8, display: 'flex', flexDirection: 'column', gap: '25px' }}>
+        <section>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.3rem' }}>1. Información que Recopilamos</h3>
+          <p>Recopilamos información cuando te registras en nuestro sitio a través de Discord, realizas un pedido o te comunicas con nosotros. Esta información incluye tu nombre de usuario de Discord, ID de usuario y avatar.</p>
+        </section>
+        <section>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.3rem' }}>2. Uso de la Información</h3>
+          <p>La información que recopilamos se utiliza para personalizar tu experiencia, procesar transacciones, enviar notificaciones sobre tu pedido y mejorar nuestro servicio al cliente.</p>
+        </section>
+        <section>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.3rem' }}>3. Protección de Datos</h3>
+          <p>Implementamos una variedad de medidas de seguridad para mantener la seguridad de tu información personal. No almacenamos contraseñas ni información financiera sensible en nuestros servidores.</p>
+        </section>
+        <section>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.3rem' }}>4. Compartir Información con Terceros</h3>
+          <p>No vendemos, comercializamos ni transferimos de ningún modo a terceros tu información personal identificable. Esto no incluye a los terceros de confianza que nos asisten en operar nuestro sitio web.</p>
+        </section>
+        <section>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.3rem' }}>5. Consentimiento</h3>
+          <p>Al utilizar nuestro sitio web, aceptas nuestra política de privacidad en línea.</p>
+        </section>
+      </div>
+      <div style={{ textAlign: 'center', marginTop: '50px' }}>
+        <Link to="/" className="btn-primary" style={{ display: 'inline-flex', padding: '12px 35px' }}>Volver al Inicio</Link>
+      </div>
+    </div>
+  </motion.div>
+);
+
+const Faq = () => (
+  <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="container" style={{ paddingTop: '180px', paddingBottom: '100px' }}>
+    <div className="glass" style={{ padding: '40px', maxWidth: '900px', margin: '0 auto' }}>
+      <h1 style={{ fontSize: '2.5rem', fontWeight: 900, marginBottom: '20px', color: 'var(--primary)', textAlign: 'center' }}>Preguntas Frecuentes</h1>
+      <div className="underline" style={{ marginBottom: '40px' }}></div>
+      <div style={{ color: 'var(--text-gray)', lineHeight: 1.8, display: 'flex', flexDirection: 'column', gap: '25px' }}>
+        <section style={{ background: 'rgba(255,255,255,0.02)', padding: '25px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: 'var(--primary)' }}>Q:</span> ¿Cómo recibo mi producto después de pagar?
+          </h3>
+          <p style={{ paddingLeft: '28px' }}>Una vez confirmado el pedido, un administrador se pondrá en contacto contigo directamente a través de Discord para realizar la entrega inmediata de tus activos digitales.</p>
+        </section>
+        <section style={{ background: 'rgba(255,255,255,0.02)', padding: '25px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: 'var(--primary)' }}>Q:</span> ¿Qué métodos de pago aceptan?
+          </h3>
+          <p style={{ paddingLeft: '28px' }}>Aceptamos diversos métodos de pago acordados con nuestros administradores, incluyendo transferencias bancarias, criptomonedas y pasarelas digitales populares.</p>
+        </section>
+        <section style={{ background: 'rgba(255,255,255,0.02)', padding: '25px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: 'var(--primary)' }}>Q:</span> ¿Es seguro comprar en SP4CE Store?
+          </h3>
+          <p style={{ paddingLeft: '28px' }}>Totalmente. Utilizamos autenticación segura de Discord y mantenemos un registro transparente de reputación y valoraciones de la comunidad para cada producto y administrador.</p>
+        </section>
+        <section style={{ background: 'rgba(255,255,255,0.02)', padding: '25px', borderRadius: '15px', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <h3 style={{ color: 'white', fontWeight: 800, marginBottom: '10px', fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: 'var(--primary)' }}>Q:</span> ¿Puedo solicitar un reembolso?
+          </h3>
+          <p style={{ paddingLeft: '28px' }}>Debido a la naturaleza digital de los productos, no ofrecemos reembolsos una vez entregado el activo. Si tienes problemas antes de la entrega, contacta a soporte.</p>
+        </section>
+      </div>
+      <div style={{ textAlign: 'center', marginTop: '50px' }}>
+        <Link to="/" className="btn-primary" style={{ display: 'inline-flex', padding: '12px 35px' }}>Volver al Inicio</Link>
+      </div>
+    </div>
+  </motion.div>
+);
+
 // --- FULL FOOTER ---
 const Footer = () => (
   <footer style={{ padding: '100px 0 50px', background: 'rgba(0,0,0,0.85)', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
@@ -854,18 +959,19 @@ const Footer = () => (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
             <Link to="/" style={{ color: 'var(--text-gray)', textDecoration: 'none' }}>Inicio</Link>
             <Link to="/productos" style={{ color: 'var(--text-gray)', textDecoration: 'none' }}>Productos</Link>
-            <a href="#team" style={{ color: 'var(--text-gray)', textDecoration: 'none' }}>Nuestro Equipo</a>
+            <a href="/#team" style={{ color: 'var(--text-gray)', textDecoration: 'none' }}>Nuestro Equipo</a>
           </div>
         </div>
         <div>
           <h4 style={{ color: 'var(--primary)', fontWeight: 900, marginBottom: '25px', letterSpacing: '2px' }}>SOPORTE</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            <a href="#" style={{ color: 'var(--text-gray)', textDecoration: 'none' }}>Términos y Condiciones</a>
-            <a href="#" style={{ color: 'var(--text-gray)', textDecoration: 'none' }}>Preguntas Frecuentes</a>
-            <div style={{ display: 'flex', gap: '20px', marginTop: '10px' }}>
-              <Mail size={22} style={{ cursor: 'pointer' }}/>
-              <MessageCircle size={22} style={{ cursor: 'pointer' }}/>
-              <Globe size={22} style={{ cursor: 'pointer' }}/>
+            <Link to="/terminos" style={{ color: 'var(--text-gray)', textDecoration: 'none' }}>Términos y Condiciones</Link>
+            <Link to="/privacidad" style={{ color: 'var(--text-gray)', textDecoration: 'none' }}>Política de Privacidad</Link>
+            <Link to="/faq" style={{ color: 'var(--text-gray)', textDecoration: 'none' }}>Preguntas Frecuentes</Link>
+            <div className="support-icons" style={{ display: 'flex', gap: '20px', marginTop: '10px' }}>
+              <Mail size={22} style={{ cursor: 'pointer', color: 'var(--text-gray)' }}/>
+              <MessageCircle size={22} style={{ cursor: 'pointer', color: 'var(--text-gray)' }}/>
+              <Globe size={22} style={{ cursor: 'pointer', color: 'var(--text-gray)' }}/>
             </div>
           </div>
         </div>
