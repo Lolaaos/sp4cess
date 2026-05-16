@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import session from 'express-session';
+import cookieSession from 'cookie-session';
 import axios from 'axios';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -28,11 +28,12 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(session({
+app.use(cookieSession({
+  name: 'sp4ce_session',
   secret: process.env.SESSION_SECRET || 'sp4ce_ultra_secure_2026',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { secure: false, maxAge: 1000 * 60 * 60 * 24 }
+  maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+  secure: false,
+  sameSite: 'lax'
 }));
 
 const DATA_FILE = path.join(__dirname, 'products.json');
