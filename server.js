@@ -36,7 +36,8 @@ app.use((req, res, next) => {
     }));
     if (cookies.sp4ce_user) {
       try {
-        req.session.user = JSON.parse(decodeURIComponent(cookies.sp4ce_user));
+        const decoded = Buffer.from(cookies.sp4ce_user, 'base64').toString('utf-8');
+        req.session.user = JSON.parse(decoded);
       } catch (e) { req.session.user = null; }
     }
   }
@@ -335,11 +336,12 @@ app.get('/auth/discord/callback', async (req, res) => {
     const u = await axios.get('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${t.data.access_token}` } });
     req.session.user = u.data; 
     updateTeamList(u.data); 
-    res.cookie('sp4ce_user', encodeURIComponent(JSON.stringify(u.data)), {
+    const base64User = Buffer.from(JSON.stringify(u.data)).toString('base64');
+    res.cookie('sp4ce_user', base64User, {
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
       httpOnly: true,
-      secure: false,
-      sameSite: 'lax'
+      secure: process.env.VERCEL ? true : false,
+      sameSite: process.env.VERCEL ? 'none' : 'lax'
     });
     res.redirect('/');
   } catch (e) { res.redirect('/?error=auth'); }
