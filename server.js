@@ -340,6 +340,7 @@ app.get('/auth/discord/callback', async (req, res) => {
     res.cookie('sp4ce_user', base64User, {
       maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
       httpOnly: true,
+      path: '/',
       secure: process.env.VERCEL ? true : false,
       sameSite: process.env.VERCEL ? 'none' : 'lax'
     });
