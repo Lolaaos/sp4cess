@@ -3,7 +3,7 @@
 // Separa los IDs con comas.
 
 export const ADMIN_IDS = [
-  "269902224732192768", "884858860291117066" // Tu ID principal
+  "269902224732192768", "884858860291117066" //  Tu ID principal
 ];
 
 export const PURCHASE_WEBHOOK_URL =
