@@ -1,0 +1,67 @@
+[
+  {
+    "targetId": "admin_269902224732192768",
+    "reviews": [
+      {
+        "id": 1778972457825,
+        "userId": "269902224732192768",
+        "username": "47gt",
+        "avatar": "766900fca9f6ebf7e8fb5af8bb449a06",
+        "rating": 5,
+        "comment": "soy el mejor",
+        "date": "2026-05-16T23:00:57.825Z"
+      },
+      {
+        "id": 1778968409117,
+        "userId": "269902224732192768",
+        "username": "47gt",
+        "avatar": "766900fca9f6ebf7e8fb5af8bb449a06",
+        "rating": 5,
+        "comment": "w",
+        "date": "2026-05-16T21:53:29.117Z"
+      }
+    ]
+  },
+  {
+    "targetId": "prod_1778967885448",
+    "reviews": [
+      {
+        "id": 1778971603134,
+        "userId": "269902224732192768",
+        "username": "47gt",
+        "avatar": "766900fca9f6ebf7e8fb5af8bb449a06",
+        "rating": 5,
+        "comment": "w servicio xd",
+        "date": "2026-05-16T22:46:43.134Z"
+      }
+    ]
+  },
+  {
+    "targetId": "prod_1778972387615",
+    "reviews": [
+      {
+        "id": 1778972429974,
+        "userId": "269902224732192768",
+        "username": "47gt",
+        "avatar": "766900fca9f6ebf7e8fb5af8bb449a06",
+        "rating": 5,
+        "comment": "w servicio, me llego una gorda a mi casa, recomendable.!!!",
+        "date": "2026-05-16T23:00:29.975Z"
+      }
+    ]
+  },
+  {
+    "targetId": "admin_1281187874523451423",
+    "reviews": [
+      {
+        "id": 1778972464601,
+        "userId": "269902224732192768",
+        "username": "47gt",
+        "avatar": "766900fca9f6ebf7e8fb5af8bb449a06",
+        "rating": 5,
+        "comment": "y este tipo quien es lol",
+        "date": "2026-05-16T23:01:04.601Z"
+      }
+    ]
+  }
+]
