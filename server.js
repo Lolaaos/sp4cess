@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import express from 'express';
-import session from 'express-session';
 import axios from 'axios';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -28,12 +27,21 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'sp4ce_ultra_secure_2026',
-  resave: true,
-  saveUninitialized: true,
-  cookie: { secure: false, maxAge: 1000 * 60 * 60 * 24 }
-}));
+app.use((req, res, next) => {
+  req.session = req.session || {};
+  if (req.headers.cookie) {
+    const cookies = Object.fromEntries(req.headers.cookie.split('; ').map(c => {
+      const parts = c.split('=');
+      return [parts[0], parts.slice(1).join('=')];
+    }));
+    if (cookies.sp4ce_user) {
+      try {
+        req.session.user = JSON.parse(decodeURIComponent(cookies.sp4ce_user));
+      } catch (e) { req.session.user = null; }
+    }
+  }
+  next();
+});
 
 const DATA_FILE = path.join(__dirname, 'products.json');
 const COUPONS_FILE = path.join(__dirname, 'coupons.json');
@@ -325,10 +333,22 @@ app.get('/auth/discord/callback', async (req, res) => {
   try {
     const t = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({ client_id: process.env.DISCORD_CLIENT_ID, client_secret: process.env.DISCORD_CLIENT_SECRET, grant_type: 'authorization_code', code, redirect_uri: process.env.DISCORD_REDIRECT_URI }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
     const u = await axios.get('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${t.data.access_token}` } });
-    req.session.user = u.data; updateTeamList(u.data); res.redirect('/');
+    req.session.user = u.data; 
+    updateTeamList(u.data); 
+    res.cookie('sp4ce_user', encodeURIComponent(JSON.stringify(u.data)), {
+      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax'
+    });
+    res.redirect('/');
   } catch (e) { res.redirect('/?error=auth'); }
 });
-app.get('/api/logout', (req, res) => req.session.destroy(() => res.redirect('/')));
+app.get('/api/logout', (req, res) => {
+  req.session.user = null;
+  res.clearCookie('sp4ce_user');
+  res.redirect('/');
+});
 
 // CRUD & REVIEWS
 app.post('/api/products', isAdmin, (req, res) => { const p = { id: Date.now(), ...req.body }; products.push(p); saveData(DATA_FILE, products); res.status(201).json(p); });
