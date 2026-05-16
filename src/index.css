@@ -190,15 +190,26 @@ body {
   top: 10px;
 }
 
+.nav-brand {
+  flex: 1;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}
+
 .nav-links {
+  flex: 1;
   display: flex;
   gap: 30px;
+  justify-content: center;
   align-items: center;
 }
 
 .nav-user {
+  flex: 1;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 15px;
 }
 
@@ -289,15 +300,19 @@ body {
     top: 10px;
   }
   .nav-brand {
+    flex: 1 1 auto;
     font-size: 1.4rem !important;
   }
   .nav-user {
+    flex: 1 1 auto;
+    justify-content: flex-end;
     gap: 10px;
   }
   .nav-user .user-info-text {
     display: none;
   }
   .nav-links {
+    flex: 1 1 100%;
     width: 100%;
     justify-content: center;
     gap: 20px;
