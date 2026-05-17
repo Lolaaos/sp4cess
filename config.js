@@ -1,7 +1,4 @@
 // SP4CE Store - Configuración de Administradores
-// Añade aquí los IDs de Discord de las personas que tendrán acceso al Panel Admin.
-// Separa los IDs con comas.
-
 export const ADMIN_IDS = [
   "269902224732192768", // Tu ID principal
   "884858860291117066"  // Otro admin
