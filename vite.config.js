@@ -14,7 +14,7 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: './index.html'
+        main: './index.html'  // ✅ Apunta al index.html en la raíz
       }
     }
   },
