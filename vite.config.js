@@ -17,5 +17,18 @@ export default defineConfig({
         main: './index.html'
       }
     }
+  },
+  server: {
+    port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      '/auth': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      }
+    }
   }
 });
