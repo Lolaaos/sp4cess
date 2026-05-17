@@ -6,12 +6,7 @@ import helmet from 'helmet';
 import xss from 'xss';
 import cookieParser from 'cookie-parser';
 import { createClient } from '@supabase/supabase-js';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { ADMIN_IDS, PURCHASE_WEBHOOK_URL } from '../config.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -41,75 +36,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Funciones para Supabase
-const getSupabaseData = async (table, defaultValue = []) => {
-  try {
-    const { data, error } = await supabase.from(table).select('*');
-    if (error) throw error;
-    return data || defaultValue;
-  } catch (e) {
-    console.error(`[Supabase] Error al leer ${table}:`, e.message);
-    return defaultValue;
-  }
-};
-
-const saveSupabaseData = async (table, data, idField = 'id') => {
-  try {
-    if (data[idField]) {
-      const { error } = await supabase.from(table).upsert(data, { onConflict: idField });
-      if (error) throw error;
-    } else {
-      const { error } = await supabase.from(table).insert(data);
-      if (error) throw error;
-    }
-  } catch (e) {
-    console.error(`[Supabase] Error al guardar en ${table}:`, e.message);
-  }
-};
-
-// Configuración de Discord
-const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
-
-const fetchUserFromBot = async (userId) => {
-  if (!BOT_TOKEN) return null;
-  try {
-    const res = await axios.get(`https://discord.com/api/v10/users/${userId}`, {
-      headers: { Authorization: `Bot ${BOT_TOKEN}` },
-      timeout: 1500,
-    });
-    return res.data;
-  } catch (e) {
-    return null;
-  }
-};
-
-const updateTeamList = async (user) => {
-  if (!user || !user.id) return;
-  const idStr = String(user.id);
-  const adminIdsStr = ADMIN_IDS.map(id => String(id));
-
-  if (adminIdsStr.includes(idStr)) {
-    let teamList = await getSupabaseData('team', []);
-    if (!Array.isArray(teamList)) teamList = [];
-
-    const idx = teamList.findIndex(m => String(m.id) === idStr);
-    const data = { id: idStr, username: user.username, avatar: user.avatar, banner: user.banner };
-    if (idx === -1) teamList.push(data);
-    else teamList[idx] = data;
-
-    await saveSupabaseData('team', teamList);
-  }
-};
-
-const isAdmin = (req, res, next) => {
-  const userId = req.session.user ? String(req.session.user.id) : null;
-  if (userId && ADMIN_IDS.map(id => String(id)).includes(userId)) return next();
-  res.status(403).json({ error: 'Acceso denegado' });
-};
-
-// --- Rutas API ---
-
-// Products
+// --- Rutas API (solo las esenciales para probar) ---
 app.get('/api/products', async (req, res) => {
   try {
     const { data, error } = await supabase.from('products').select('*');
@@ -120,22 +47,64 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-app.post('/api/products', isAdmin, async (req, res) => {
-  try {
-    const product = { id: Date.now(), ...req.body };
-    const { error } = await supabase.from('products').insert(product);
-    if (error) throw error;
-    res.status(201).json(product);
-  } catch (e) {
-    res.status(500).json({ error: 'Error al crear producto' });
+app.get('/api/me', (req, res) => {
+  if (req.session.user) {
+    const userId = String(req.session.user.id);
+    const isUserAdmin = ADMIN_IDS.includes(userId);
+    res.json({ user: req.session.user, isAdmin: isUserAdmin });
+  } else {
+    res.status(401).end();
   }
 });
 
-app.put('/api/products/:id', isAdmin, async (req, res) => {
+app.get('/auth/discord', (req, res) => {
+  res.redirect(
+    `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(
+      process.env.DISCORD_REDIRECT_URI
+    )}&response_type=code&scope=identify`
+  );
+});
+
+app.get('/auth/discord/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) return res.redirect('/?error=auth');
+
   try {
-    const productId = req.params.id;
-    const updatedProduct = { id: productId, ...req.body };
-    const { error } = await supabase.from('products').upsert(updatedProduct, { onConflict: 'id' });
-    if (error) throw error;
-    res.json(updatedProduct);
-  } catch
+    const tokenResponse = await axios.post(
+      'https://discord.com/api/oauth2/token',
+      new URLSearchParams({
+        client_id: process.env.DISCORD_CLIENT_ID,
+        client_secret: process.env.DISCORD_CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: process.env.DISCORD_REDIRECT_URI,
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+
+    const userResponse = await axios.get('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenResponse.data.access_token}` },
+    });
+
+    req.session.user = userResponse.data;
+    const base64User = Buffer.from(JSON.stringify(userResponse.data)).toString('base64');
+    res.cookie('sp4ce_user', base64User, {
+      maxAge: 1000 * 60 * 60 * 24 * 30,
+      httpOnly: true,
+      path: '/',
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    });
+    res.redirect('/');
+  } catch (e) {
+    res.redirect('/?error=auth');
+  }
+});
+
+app.get('/api/logout', (req, res) => {
+  res.clearCookie('sp4ce_user');
+  res.redirect('/');
+});
+
+// Exporta la app para Vercel
+export default app;
