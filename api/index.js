@@ -8,7 +8,7 @@ import cookieParser from 'cookie-parser';
 import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { ADMIN_IDS, PURCHASE_WEBHOOK_URL } from './config.js';
+import { ADMIN_IDS, PURCHASE_WEBHOOK_URL } from '../config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,7 +31,6 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'dist')));
 
 // Middleware para sesión
 app.use((req, res, next) => {
@@ -136,6 +135,28 @@ app.post('/api/products', isAdmin, async (req, res) => {
   }
 });
 
+app.put('/api/products/:id', isAdmin, async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const updatedProduct = { id: productId, ...req.body };
+    const { error } = await supabase.from('products').upsert(updatedProduct, { onConflict: 'id' });
+    if (error) throw error;
+    res.json(updatedProduct);
+  } catch (e) {
+    res.status(500).json({ error: 'Error al actualizar producto' });
+  }
+});
+
+app.delete('/api/products/:id', isAdmin, async (req, res) => {
+  try {
+    const { error } = await supabase.from('products').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Error al eliminar producto' });
+  }
+});
+
 // Coupons
 app.get('/api/coupons', async (req, res) => {
   try {
@@ -144,6 +165,27 @@ app.get('/api/coupons', async (req, res) => {
     res.json(data || []);
   } catch (e) {
     res.status(500).json({ error: 'Error al obtener cupones' });
+  }
+});
+
+app.post('/api/coupons', isAdmin, async (req, res) => {
+  try {
+    const coupon = { id: Date.now(), ...req.body };
+    const { error } = await supabase.from('coupons').insert(coupon);
+    if (error) throw error;
+    res.status(201).json(coupon);
+  } catch (e) {
+    res.status(500).json({ error: 'Error al crear cupón' });
+  }
+});
+
+app.delete('/api/coupons/:id', isAdmin, async (req, res) => {
+  try {
+    const { error } = await supabase.from('coupons').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Error al eliminar cupón' });
   }
 });
 
@@ -158,87 +200,53 @@ app.get('/api/notifications', isAdmin, async (req, res) => {
   }
 });
 
-// Reviews
-app.get('/api/reviews/:id', async (req, res) => {
+app.post('/api/notifications/:id/confirm', isAdmin, async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('reviews')
+    const notifId = Number(req.params.id);
+    const { data: notif, error } = await supabase
+      .from('notifications')
       .select('*')
-      .eq('target_id', req.params.id);
-    if (error) throw error;
-    res.json(data || []);
+      .eq('id', notifId)
+      .single();
+
+    if (error || !notif) {
+      return res.status(404).json({ error: 'Notificación no encontrada' });
+    }
+    if (notif.status === 'confirmed') {
+      return res.status(400).json({ error: 'La compra ya fue confirmada' });
+    }
+
+    const updatedNotif = {
+      ...notif,
+      status: 'confirmed',
+      confirmedAt: new Date().toISOString()
+    };
+    await supabase.from('notifications').upsert(updatedNotif, { onConflict: 'id' });
+
+    if (Array.isArray(notif.items)) {
+      const { data: products, error: prodError } = await supabase.from('products').select('*');
+      if (!prodError && products) {
+        for (const item of notif.items) {
+          const prod = products.find(p => String(p.id) === String(item.id));
+          if (prod) {
+            const currentStock = Number(prod.stock) || 0;
+            const qty = Number(item.qty) || 0;
+            const newStock = Math.max(0, currentStock - qty);
+            await supabase.from('products').upsert({ ...prod, stock: newStock }, { onConflict: 'id' });
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, notification: updatedNotif });
   } catch (e) {
-    res.status(500).json({ error: 'Error al obtener reseñas' });
+    res.status(500).json({ error: 'Error al confirmar notificación' });
   }
 });
 
-// Auth
-app.get('/api/me', (req, res) => {
-  if (req.session.user) {
-    const userId = String(req.session.user.id);
-    const isUserAdmin = ADMIN_IDS.map(id => String(id)).includes(userId);
-    res.json({ user: req.session.user, isAdmin: isUserAdmin });
-  } else {
-    res.status(401).end();
-  }
-});
-
-app.get('/auth/discord', (req, res) => {
-  res.redirect(
-    `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(
-      process.env.DISCORD_REDIRECT_URI
-    )}&response_type=code&scope=identify`
-  );
-});
-
-app.get('/auth/discord/callback', async (req, res) => {
-  const { code } = req.query;
-  if (!code) return res.redirect('/?error=auth');
-
+app.delete('/api/notifications/:id', isAdmin, async (req, res) => {
   try {
-    const tokenResponse = await axios.post(
-      'https://discord.com/api/oauth2/token',
-      new URLSearchParams({
-        client_id: process.env.DISCORD_CLIENT_ID,
-        client_secret: process.env.DISCORD_CLIENT_SECRET,
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: process.env.DISCORD_REDIRECT_URI,
-      }),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-    );
-
-    const userResponse = await axios.get('https://discord.com/api/users/@me', {
-      headers: { Authorization: `Bearer ${tokenResponse.data.access_token}` },
-    });
-
-    req.session.user = userResponse.data;
-    await updateTeamList(userResponse.data);
-
-    const base64User = Buffer.from(JSON.stringify(userResponse.data)).toString('base64');
-    res.cookie('sp4ce_user', base64User, {
-      maxAge: 1000 * 60 * 60 * 24 * 30,
-      httpOnly: true,
-      path: '/',
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    });
-
-    res.redirect('/');
-  } catch (e) {
-    res.redirect('/?error=auth');
-  }
-});
-
-app.get('/api/logout', (req, res) => {
-  res.clearCookie('sp4ce_user');
-  res.redirect('/');
-});
-
-// Manejo de rutas estáticas
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-// Exporta la app para Vercel
-export default app;
+    const { error } = await supabase.from('notifications').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch
