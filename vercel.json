@@ -5,19 +5,23 @@
       "src": "server.js",
       "use": "@vercel/node",
       "config": {
-        "memory": 300,
-        "maxDuration": 30,
-        "zeroConfig": true  // ✅ Importante para ES Modules
+        "memory": 1024,
+        "maxDuration": 15,
+        "zeroConfig": true
+      }
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
       }
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "server.js",
-      "headers": {
-        "Content-Type": "application/json"
-      }
+      "dest": "server.js"
     },
     {
       "src": "/auth/(.*)",
