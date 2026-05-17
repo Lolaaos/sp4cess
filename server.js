@@ -1,12 +1,16 @@
 import 'dotenv/config';
 import express from 'express';
 import axios from 'axios';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import cors from 'cors';
 import helmet from 'helmet';
 import xss from 'xss';
-import fs from 'fs';
+import cookieParser from 'cookie-parser';
+import { createClient } from '@supabase/supabase-js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Importa la configuración de admins y webhook
+import { ADMIN_IDS, PURCHASE_WEBHOOK_URL } from './config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,94 +18,73 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false
+// --- Configuración de Supabase ---
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// --- Middlewares ---
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+app.use(cors({
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
 }));
-app.use(cors());
 app.use(express.json());
+app.use(cookieParser());
+app.use(express.static(path.join(__dirname, 'dist')));
 
-app.use((req, res, next) => {
-  console.log(`[REQ] ${req.method} ${req.url}`);
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  next();
-});
-
+// Middleware para manejar la sesión desde cookies
 app.use((req, res, next) => {
   req.session = req.session || {};
-  if (req.headers.cookie) {
-    const cookies = Object.fromEntries(req.headers.cookie.split('; ').map(c => {
-      const parts = c.split('=');
-      return [parts[0], parts.slice(1).join('=')];
-    }));
-    if (cookies.sp4ce_user) {
-      try {
-        const decoded = Buffer.from(cookies.sp4ce_user, 'base64').toString('utf-8');
-        req.session.user = JSON.parse(decoded);
-      } catch (e) { req.session.user = null; }
+  if (req.cookies.sp4ce_user) {
+    try {
+      const decoded = Buffer.from(req.cookies.sp4ce_user, 'base64').toString('utf-8');
+      req.session.user = JSON.parse(decoded);
+    } catch (e) {
+      req.session.user = null;
     }
   }
   next();
 });
 
-const DATA_FILE = path.join(__dirname, 'products.json');
-const COUPONS_FILE = path.join(__dirname, 'coupons.json');
-const REVIEWS_FILE = path.join(__dirname, 'reviews.json');
-const ADMIN_STATS_FILE = path.join(__dirname, 'admin_stats.json');
-const TEAM_FILE = path.join(__dirname, 'team.json');
-const SETTINGS_FILE = path.join(__dirname, 'settings.json');
-const NOTIFICATIONS_FILE = path.join(__dirname, 'notifications.json');
-
-
-const resolveFilePath = (file) => {
-  if (process.env.VERCEL) {
-    const filename = path.basename(file);
-    const tmpPath = path.join('/tmp', filename);
-    if (fs.existsSync(tmpPath)) {
-      return tmpPath;
-    }
-  }
-  return file;
-};
-
-const loadData = (file, isArray = true) => {
+// --- Funciones para Supabase ---
+const getSupabaseData = async (table, defaultValue = []) => {
   try {
-    const activeFile = resolveFilePath(file);
-    if (!fs.existsSync(activeFile)) return isArray ? [] : {};
-    const raw = fs.readFileSync(activeFile, 'utf-8').trim();
-    if (!raw) return isArray ? [] : {};
-    return JSON.parse(raw);
-  } catch (e) { 
-    console.warn(`[SP4CE] Warning: Invalid JSON in ${file}. Using fallback.`);
-    return isArray ? [] : {}; 
+    const { data, error } = await supabase.from(table).select('*');
+    if (error) throw error;
+    return data || defaultValue;
+  } catch (e) {
+    console.error(`[Supabase] Error al leer ${table}:`, e.message);
+    return defaultValue;
   }
 };
 
-let products = loadData(DATA_FILE);
-let coupons = loadData(COUPONS_FILE);
-let reviews = loadData(REVIEWS_FILE);
-let adminStats = loadData(ADMIN_STATS_FILE, false);
-let teamList = loadData(TEAM_FILE);
-let settings = loadData(SETTINGS_FILE, false);
-let notifications = loadData(NOTIFICATIONS_FILE);
-if (!settings.currency) settings.currency = 'USD';
-
-
-const saveData = (file, data) => {
+const saveSupabaseData = async (table, data, idField = 'id') => {
   try {
-    if (process.env.VERCEL) {
-      const filename = path.basename(file);
-      const tmpPath = path.join('/tmp', filename);
-      fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2));
+    if (data[idField]) {
+      const { error } = await supabase.from(table).upsert(data, { onConflict: idField });
+      if (error) throw error;
     } else {
-      fs.writeFileSync(file, JSON.stringify(data, null, 2));
+      const { error } = await supabase.from(table).insert(data);
+      if (error) throw error;
     }
   } catch (e) {
-    console.warn(`[SP4CE] Warning: Could not write to ${file}:`, e.message);
+    console.error(`[Supabase] Error al guardar en ${table}:`, e.message);
   }
 };
 
-import { ADMIN_IDS, PURCHASE_WEBHOOK_URL } from './config.js';
+const deleteSupabaseData = async (table, id, idField = 'id') => {
+  try {
+    const { error } = await supabase.from(table).delete().eq(idField, id);
+    if (error) throw error;
+  } catch (e) {
+    console.error(`[Supabase] Error al eliminar de ${table}:`, e.message);
+  }
+};
+
+// --- Configuración de Discord ---
 const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;
 
 const fetchUserFromBot = async (userId) => {
@@ -109,123 +92,376 @@ const fetchUserFromBot = async (userId) => {
   try {
     const res = await axios.get(`https://discord.com/api/v10/users/${userId}`, {
       headers: { Authorization: `Bot ${BOT_TOKEN}` },
-      timeout: 1500
+      timeout: 1500,
     });
     return res.data;
-  } catch (e) { return null; }
+  } catch (e) {
+    console.error(`[Discord] Error al obtener usuario ${userId}:`, e.message);
+    return null;
+  }
 };
 
-const updateTeamList = (user) => {
+const updateTeamList = async (user) => {
   if (!user || !user.id) return;
   const idStr = String(user.id);
   const adminIdsStr = ADMIN_IDS.map(id => String(id));
-  
+
   if (adminIdsStr.includes(idStr)) {
-    // Reload teamList from file to be absolutely sure we don't use stale memory
-    let currentTeamList = loadData(TEAM_FILE);
-    if (!Array.isArray(currentTeamList)) currentTeamList = [];
-    
-    const idx = currentTeamList.findIndex(m => String(m.id) === idStr);
-    const data = { id: idStr, username: user.username, avatar: user.avatar, banner: user.banner };
-    if (idx === -1) currentTeamList.push(data);
-    else currentTeamList[idx] = data;
-    
-    saveData(TEAM_FILE, currentTeamList);
-    console.log(`[TEAM] Profile updated for Admin: ${user.username}`);
-  } else {
-    console.log(`[TEAM] Skip: User ${user.username} (${idStr}) is not in Admin list.`);
+    let teamList = await getSupabaseData('team', []);
+    if (!Array.isArray(teamList)) teamList = [];
+
+    const idx = teamList.findIndex(m => String(m.id) === idStr);
+    const data = {
+      id: idStr,
+      username: user.username,
+      avatar: user.avatar,
+      banner: user.banner
+    };
+    if (idx === -1) teamList.push(data);
+    else teamList[idx] = data;
+
+    await saveSupabaseData('team', teamList);
+    console.log(`[TEAM] Perfil actualizado para Admin: ${user.username}`);
   }
 };
 
 const isAdmin = (req, res, next) => {
   const userId = req.session.user ? String(req.session.user.id) : null;
   if (userId && ADMIN_IDS.map(id => String(id)).includes(userId)) return next();
-  res.status(403).json({ error: 'Denied' });
+  res.status(403).json({ error: 'Acceso denegado: solo para administradores' });
 };
 
-// API ROUTES
+// --- API ROUTES ---
+
+// Team
 app.get('/api/team', async (req, res) => {
   try {
     const finalTeam = [];
     const processedIds = new Set();
     const currentUserId = req.session.user ? String(req.session.user.id) : null;
-    const currentTeamList = loadData(TEAM_FILE);
+    let teamList = await getSupabaseData('team', []);
     const adminIdsStr = ADMIN_IDS.map(id => String(id));
 
-    console.log(`[DEBUG-TEAM] API Hit. Config ADMIN_IDS:`, adminIdsStr);
-    console.log(`[DEBUG-TEAM] Raw team.json:`, currentTeamList);
-
-    if (Array.isArray(currentTeamList)) {
-      currentTeamList.forEach(m => { 
+    // Agrega admins desde team.json
+    if (Array.isArray(teamList)) {
+      teamList.forEach(m => {
         const idStr = String(m.id);
         if (adminIdsStr.includes(idStr)) {
-          finalTeam.push({ ...m, role: "Admin Principal" }); 
-          processedIds.add(idStr); 
-        } else {
-          console.log(`[DEBUG-TEAM] Filtered out user from team.json:`, m.username, `(${idStr})`);
+          finalTeam.push({ ...m, role: "Admin Principal" });
+          processedIds.add(idStr);
         }
       });
     }
-    
+
+    // Agrega admins desde Discord si no están en teamList
     for (const idStr of adminIdsStr) {
       if (!processedIds.has(idStr)) {
         const botUser = await fetchUserFromBot(idStr);
-        if (botUser) finalTeam.push({ id: idStr, username: botUser.username, avatar: botUser.avatar, banner: botUser.banner, role: "Admin Principal" });
-        else finalTeam.push({ id: idStr, username: `Admin (${idStr.slice(-4)})`, avatar: null, banner: null, role: "Admin Principal", isPlaceholder: true });
+        if (botUser) {
+          finalTeam.push({
+            id: idStr,
+            username: botUser.username,
+            avatar: botUser.avatar,
+            banner: botUser.banner,
+            role: "Admin Principal"
+          });
+        } else {
+          finalTeam.push({
+            id: idStr,
+            username: `Admin (${idStr.slice(-4)})`,
+            avatar: null,
+            banner: null,
+            role: "Admin Principal",
+            isPlaceholder: true
+          });
+        }
         processedIds.add(idStr);
       }
     }
 
-    console.log(`[DEBUG-TEAM] Final Team sent to frontend:`, finalTeam.map(f => f.username));
-    
-    res.json(finalTeam.map(m => {
-      const likedBy = Array.isArray(adminStats[m.id]) ? adminStats[m.id] : [];
-      return { 
-        ...m, 
-        likes: likedBy.length,
-        hasLiked: currentUserId ? likedBy.some(id => String(id) === currentUserId) : false
+    // Obtiene los likes para cada admin
+    const teamWithLikes = await Promise.all(finalTeam.map(async (m) => {
+      const { data: stats } = await supabase
+        .from('admin_stats')
+        .select('likes')
+        .eq('admin_id', m.id)
+        .single();
+      const likes = stats?.likes || [];
+      return {
+        ...m,
+        likes: likes.length,
+        hasLiked: currentUserId ? likes.some(id => String(id) === currentUserId) : false,
       };
     }));
-  } catch (err) { res.status(500).end(); }
+
+    res.json(teamWithLikes);
+  } catch (err) {
+    console.error('[TEAM] Error:', err.message);
+    res.status(500).json({ error: 'Error al obtener el equipo' });
+  }
 });
 
-app.post('/api/admin-stats/:id/like', (req, res) => {
+// Admin Stats (Likes)
+app.post('/api/admin-stats/:id/like', async (req, res) => {
   if (!req.session.user) return res.status(401).json({ error: 'Inicia sesión para votar' });
   const adminId = String(req.params.id);
   const userId = String(req.session.user.id);
-  
-  // adminStats will now be { adminId: [userId1, userId2, ...] }
-  if (!Array.isArray(adminStats[adminId])) adminStats[adminId] = [];
 
-  const alreadyLiked = adminStats[adminId].some(id => String(id) === userId);
-  
+  const { data: stats, error } = await supabase
+    .from('admin_stats')
+    .select('likes')
+    .eq('admin_id', adminId)
+    .single();
+
+  let likes = [];
+  if (!error && stats) likes = stats.likes || [];
+
+  const alreadyLiked = likes.some(id => String(id) === userId);
   if (alreadyLiked) {
-    return res.status(400).json({ error: 'Ya has apoyado a este administrador', likes: adminStats[adminId].length });
+    return res.status(400).json({
+      error: 'Ya has apoyado a este administrador',
+      likes: likes.length
+    });
   }
 
-  adminStats[adminId].push(userId);
-  saveData(ADMIN_STATS_FILE, adminStats);
-  
-  res.json({ likes: adminStats[adminId].length, hasLiked: true });
+  likes.push(userId);
+  await supabase
+    .from('admin_stats')
+    .upsert({ admin_id: adminId, likes }, { onConflict: 'admin_id' });
+
+  res.json({ likes: likes.length, hasLiked: true });
 });
 
-app.get('/api/settings', (req, res) => res.json(settings));
-app.post('/api/settings', isAdmin, (req, res) => {
-  settings = { ...settings, ...req.body };
-  saveData(SETTINGS_FILE, settings);
+// Settings
+app.get('/api/settings', async (req, res) => {
+  const { data, error } = await supabase
+    .from('settings')
+    .select('*')
+    .single();
+
+  if (error || !data) {
+    const defaultSettings = { id: '1', currency: 'USD' };
+    await supabase.from('settings').insert(defaultSettings);
+    res.json(defaultSettings);
+  } else {
+    res.json(data);
+  }
+});
+
+app.post('/api/settings', isAdmin, async (req, res) => {
+  const settings = { id: '1', ...req.body };
+  await supabase
+    .from('settings')
+    .upsert(settings, { onConflict: 'id' });
   res.json(settings);
 });
 
-app.get('/api/products', (req, res) => {
-  // Defensive check: if products is an object (not array), convert to array
-  if (!Array.isArray(products) && typeof products === 'object') {
-    const list = Object.entries(products).map(([id, val]) => ({ id, ...val }));
-    return res.json(list);
+// Products
+app.get('/api/products', async (req, res) => {
+  const { data, error } = await supabase
+    .from('products')
+    .select('*');
+  if (error) {
+    console.error('[Products] Error:', error.message);
+    return res.json([]);
   }
-  res.json(products);
+  res.json(data);
 });
-app.get('/api/coupons', (req, res) => res.json(coupons));
 
+app.post('/api/products', isAdmin, async (req, res) => {
+  const product = {
+    id: Date.now(),
+    ...req.body
+  };
+  const { error } = await supabase
+    .from('products')
+    .insert(product);
+  if (error) {
+    console.error('[Products] Error al crear:', error.message);
+    return res.status(500).json({ error: 'No se pudo crear el producto' });
+  }
+  res.status(201).json(product);
+});
+
+app.put('/api/products/:id', isAdmin, async (req, res) => {
+  const productId = req.params.id;
+  const updatedProduct = {
+    id: productId,
+    ...req.body
+  };
+  const { error } = await supabase
+    .from('products')
+    .upsert(updatedProduct, { onConflict: 'id' });
+  if (error) {
+    console.error('[Products] Error al actualizar:', error.message);
+    return res.status(500).json({ error: 'No se pudo actualizar el producto' });
+  }
+  res.json(updatedProduct);
+});
+
+app.delete('/api/products/:id', isAdmin, async (req, res) => {
+  const { error } = await supabase
+    .from('products')
+    .delete()
+    .eq('id', req.params.id);
+  if (error) {
+    console.error('[Products] Error al eliminar:', error.message);
+    return res.status(500).json({ error: 'No se pudo eliminar el producto' });
+  }
+  res.json({ success: true });
+});
+
+// Coupons
+app.get('/api/coupons', async (req, res) => {
+  const { data, error } = await supabase
+    .from('coupons')
+    .select('*');
+  if (error) {
+    console.error('[Coupons] Error:', error.message);
+    return res.json([]);
+  }
+  res.json(data);
+});
+
+app.post('/api/coupons', isAdmin, async (req, res) => {
+  const coupon = {
+    id: Date.now(),
+    ...req.body
+  };
+  const { error } = await supabase
+    .from('coupons')
+    .insert(coupon);
+  if (error) {
+    console.error('[Coupons] Error al crear:', error.message);
+    return res.status(500).json({ error: 'No se pudo crear el cupón' });
+  }
+  res.status(201).json(coupon);
+});
+
+app.delete('/api/coupons/:id', isAdmin, async (req, res) => {
+  const { error } = await supabase
+    .from('coupons')
+    .delete()
+    .eq('id', req.params.id);
+  if (error) {
+    console.error('[Coupons] Error al eliminar:', error.message);
+    return res.status(500).json({ error: 'No se pudo eliminar el cupón' });
+  }
+  res.json({ success: true });
+});
+
+// Notifications
+app.get('/api/notifications', isAdmin, async (req, res) => {
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('*');
+  if (error) {
+    console.error('[Notifications] Error:', error.message);
+    return res.json([]);
+  }
+  res.json(data);
+});
+
+app.post('/api/notifications/:id/confirm', isAdmin, async (req, res) => {
+  const notifId = Number(req.params.id);
+  const { data: notif, error } = await supabase
+    .from('notifications')
+    .select('*')
+    .eq('id', notifId)
+    .single();
+
+  if (error || !notif) {
+    return res.status(404).json({ error: 'Notificación no encontrada' });
+  }
+  if (notif.status === 'confirmed') {
+    return res.status(400).json({ error: 'La compra ya fue confirmada' });
+  }
+
+  // Actualiza el estado de la notificación
+  const updatedNotif = {
+    ...notif,
+    status: 'confirmed',
+    confirmedAt: new Date().toISOString()
+  };
+  await supabase
+    .from('notifications')
+    .upsert(updatedNotif, { onConflict: 'id' });
+
+  // Actualiza el stock de los productos
+  if (Array.isArray(notif.items)) {
+    const { data: products, error: prodError } = await supabase
+      .from('products')
+      .select('*');
+    if (!prodError && products) {
+      for (const item of notif.items) {
+        const prod = products.find(p => String(p.id) === String(item.id));
+        if (prod) {
+          const currentStock = Number(prod.stock) || 0;
+          const qty = Number(item.qty) || 0;
+          const newStock = Math.max(0, currentStock - qty);
+          await supabase
+            .from('products')
+            .upsert({ ...prod, stock: newStock }, { onConflict: 'id' });
+        }
+      }
+    }
+  }
+
+  res.json({ success: true, notification: updatedNotif });
+});
+
+app.delete('/api/notifications/:id', isAdmin, async (req, res) => {
+  const { error } = await supabase
+    .from('notifications')
+    .delete()
+    .eq('id', req.params.id);
+  if (error) {
+    console.error('[Notifications] Error al eliminar:', error.message);
+    return res.status(500).json({ error: 'No se pudo eliminar la notificación' });
+  }
+  res.json({ success: true });
+});
+
+// Reviews
+app.get('/api/reviews/:id', async (req, res) => {
+  const { data, error } = await supabase
+    .from('reviews')
+    .select('*')
+    .eq('target_id', req.params.id);
+  if (error) {
+    console.error('[Reviews] Error:', error.message);
+    return res.json([]);
+  }
+  res.json(data || []);
+});
+
+app.post('/api/reviews/:id', async (req, res) => {
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Inicia sesión para dejar una reseña' });
+  }
+
+  const review = {
+    id: Date.now(),
+    target_id: req.params.id,
+    userId: String(req.session.user.id),
+    username: req.session.user.username,
+    avatar: req.session.user.avatar,
+    rating: parseInt(req.body.rating) || 5,
+    comment: xss(req.body.comment),
+    date: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from('reviews')
+    .insert(review);
+  if (error) {
+    console.error('[Reviews] Error al crear:', error.message);
+    return res.status(500).json({ error: 'No se pudo crear la reseña' });
+  }
+  res.status(201).json(review);
+});
+
+// Purchase Webhook
 const sendPurchaseWebhook = async ({ user, items, couponCode, discountPercent, subtotal, total, currency }) => {
   const totalQty = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
   const productLines = items.map(i => {
@@ -249,7 +485,7 @@ const sendPurchaseWebhook = async ({ user, items, couponCode, discountPercent, s
       { name: '💰 Subtotal', value: `$${Number(subtotal).toFixed(2)} ${currency}`, inline: true },
     ],
     footer: { text: 'SP4CE Store • Pedido recibido' },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 
   if (couponCode && discountPercent > 0) {
@@ -265,17 +501,23 @@ const sendPurchaseWebhook = async ({ user, items, couponCode, discountPercent, s
   embed.fields.push({
     name: '💵 Total pagado',
     value: `**$${Number(total).toFixed(2)} ${currency}**`,
-    inline: false
+    inline: false,
   });
 
   const mainImage = items[0]?.image;
   if (mainImage) embed.image = { url: mainImage };
 
-  await axios.post(PURCHASE_WEBHOOK_URL, { embeds: [embed] });
+  try {
+    await axios.post(PURCHASE_WEBHOOK_URL, { embeds: [embed] });
+  } catch (e) {
+    console.error('[PURCHASE] Error al enviar webhook:', e.message);
+  }
 };
 
 app.post('/api/purchase', async (req, res) => {
-  if (!req.session.user) return res.status(401).json({ error: 'Inicia sesión para comprar' });
+  if (!req.session.user) {
+    return res.status(401).json({ error: 'Inicia sesión para comprar' });
+  }
 
   const { items, couponCode, discountPercent, subtotal, total, currency } = req.body;
   if (!Array.isArray(items) || items.length === 0) {
@@ -283,6 +525,7 @@ app.post('/api/purchase', async (req, res) => {
   }
 
   try {
+    const settings = await getSupabaseData('settings', { currency: 'USD' });
     await sendPurchaseWebhook({
       user: req.session.user,
       items,
@@ -290,12 +533,12 @@ app.post('/api/purchase', async (req, res) => {
       discountPercent: Number(discountPercent) || 0,
       subtotal: Number(subtotal) || 0,
       total: Number(total) || 0,
-      currency: currency || settings.currency || 'USD'
+      currency: currency || settings.currency || 'USD',
     });
 
     const newNotification = {
       id: Date.now(),
-      user: req.session.user,
+      user_data: req.session.user,  // ✅ Usamos user_data en lugar de user
       items,
       couponCode: couponCode || null,
       discountPercent: Number(discountPercent) || 0,
@@ -303,128 +546,98 @@ app.post('/api/purchase', async (req, res) => {
       total: Number(total) || 0,
       currency: currency || settings.currency || 'USD',
       status: 'pending',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
-    notifications.unshift(newNotification);
-    saveData(NOTIFICATIONS_FILE, notifications);
+
+    const { error } = await supabase
+      .from('notifications')
+      .insert(newNotification);
+    if (error) {
+      console.error('[PURCHASE] Error al guardar notificación:', error.message);
+      return res.status(500).json({ error: 'No se pudo registrar la compra' });
+    }
 
     res.json({ success: true });
-
   } catch (e) {
-    console.error('[PURCHASE] Webhook error:', e.response?.data || e.message);
+    console.error('[PURCHASE] Error:', e.message);
     res.status(500).json({ error: 'No se pudo registrar la compra' });
   }
 });
 
-// --- ROUTES ---
+// Auth
 app.get('/api/me', (req, res) => {
   if (req.session.user) {
     const userId = String(req.session.user.id);
     const isUserAdmin = ADMIN_IDS.map(id => String(id)).includes(userId);
     res.json({ user: req.session.user, isAdmin: isUserAdmin });
-  } else res.status(401).end();
+  } else {
+    res.status(401).end();
+  }
 });
 
-// AUTH
 app.get('/auth/discord', (req, res) => {
-  res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.DISCORD_REDIRECT_URI)}&response_type=code&scope=identify`);
+  res.redirect(
+    `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(
+      process.env.DISCORD_REDIRECT_URI
+    )}&response_type=code&scope=identify`
+  );
 });
+
 app.get('/auth/discord/callback', async (req, res) => {
   const { code } = req.query;
+  if (!code) return res.redirect('/?error=auth');
+
   try {
-    const t = await axios.post('https://discord.com/api/oauth2/token', new URLSearchParams({ client_id: process.env.DISCORD_CLIENT_ID, client_secret: process.env.DISCORD_CLIENT_SECRET, grant_type: 'authorization_code', code, redirect_uri: process.env.DISCORD_REDIRECT_URI }), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-    const u = await axios.get('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${t.data.access_token}` } });
-    req.session.user = u.data; 
-    updateTeamList(u.data); 
-    const base64User = Buffer.from(JSON.stringify(u.data)).toString('base64');
+    const tokenResponse = await axios.post(
+      'https://discord.com/api/oauth2/token',
+      new URLSearchParams({
+        client_id: process.env.DISCORD_CLIENT_ID,
+        client_secret: process.env.DISCORD_CLIENT_SECRET,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: process.env.DISCORD_REDIRECT_URI,
+      }),
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+    );
+
+    const userResponse = await axios.get('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenResponse.data.access_token}` },
+    });
+
+    req.session.user = userResponse.data;
+    await updateTeamList(userResponse.data);
+
+    const base64User = Buffer.from(JSON.stringify(userResponse.data)).toString('base64');
     res.cookie('sp4ce_user', base64User, {
-      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
+      maxAge: 1000 * 60 * 60 * 24 * 30, // 30 días
       httpOnly: true,
       path: '/',
-      secure: process.env.VERCEL ? true : false,
-      sameSite: process.env.VERCEL ? 'none' : 'lax'
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     });
+
     res.redirect('/');
-  } catch (e) { res.redirect('/?error=auth'); }
+  } catch (e) {
+    console.error('[AUTH] Error en callback:', e.message);
+    res.redirect('/?error=auth');
+  }
 });
+
 app.get('/api/logout', (req, res) => {
-  req.session.user = null;
   res.clearCookie('sp4ce_user');
   res.redirect('/');
 });
 
-// CRUD & REVIEWS
-app.post('/api/products', isAdmin, (req, res) => { const p = { id: Date.now(), ...req.body }; products.push(p); saveData(DATA_FILE, products); res.status(201).json(p); });
-app.put('/api/products/:id', isAdmin, (req, res) => {
-  const idx = products.findIndex(p => String(p.id) === req.params.id);
-  if (idx !== -1) {
-    products[idx] = { ...products[idx], ...req.body };
-    saveData(DATA_FILE, products);
-    res.json(products[idx]);
-  } else res.status(404).json({ error: 'Not found' });
-});
-app.delete('/api/products/:id', isAdmin, (req, res) => {
-  products = products.filter(p => String(p.id) !== req.params.id);
-  saveData(DATA_FILE, products);
-  res.json({ success: true });
-});
-
-app.post('/api/coupons', isAdmin, (req, res) => { const c = { id: Date.now(), ...req.body }; coupons.push(c); saveData(COUPONS_FILE, coupons); res.status(201).json(c); });
-app.delete('/api/coupons/:id', isAdmin, (req, res) => {
-  coupons = coupons.filter(c => String(c.id) !== req.params.id);
-  saveData(COUPONS_FILE, coupons);
-  res.json({ success: true });
-});
-
-app.get('/api/notifications', isAdmin, (req, res) => {
-  res.json(notifications);
-});
-app.post('/api/notifications/:id/confirm', isAdmin, (req, res) => {
-  const notifId = Number(req.params.id);
-  const notif = notifications.find(n => n.id === notifId);
-  if (!notif) return res.status(404).json({ error: 'Notificación no encontrada' });
-  if (notif.status === 'confirmed') return res.status(400).json({ error: 'La compra ya fue confirmada' });
-
-  notif.status = 'confirmed';
-  notif.confirmedAt = new Date().toISOString();
-  saveData(NOTIFICATIONS_FILE, notifications);
-
-  if (Array.isArray(notif.items)) {
-    notif.items.forEach(item => {
-      const prod = products.find(p => String(p.id) === String(item.id));
-      if (prod) {
-        const currentStock = Number(prod.stock) || 0;
-        const qty = Number(item.qty) || 0;
-        const newStock = Math.max(0, currentStock - qty);
-        prod.stock = typeof prod.stock === 'string' ? String(newStock) : newStock;
-      }
-    });
-    saveData(DATA_FILE, products);
-  }
-
-  res.json({ success: true, notification: notif, products });
-});
-app.delete('/api/notifications/:id', isAdmin, (req, res) => {
-  const notifId = Number(req.params.id);
-  notifications = notifications.filter(n => n.id !== notifId);
-  saveData(NOTIFICATIONS_FILE, notifications);
-  res.json({ success: true });
-});
-
-app.get('/api/reviews/:id', (req, res) => { const t = reviews.find(x => x.targetId === req.params.id); res.json(t ? t.reviews : []); });
-app.post('/api/reviews/:id', (req, res) => { if (!req.session.user) return res.status(401).end(); const r = { id: Date.now(), userId: String(req.session.user.id), username: req.session.user.username, avatar: req.session.user.avatar, rating: parseInt(req.body.rating) || 5, comment: xss(req.body.comment), date: new Date().toISOString() }; let t = reviews.find(x => x.targetId === req.params.id); if (!t) { t = { targetId: req.params.id, reviews: [] }; reviews.push(t); } t.reviews.unshift(r); saveData(REVIEWS_FILE, reviews); res.status(201).json(r); });
-
-
-app.use(express.static(path.join(__dirname, 'dist')));
-app.use((req, res) => {
+// --- Manejo de rutas estáticas (para Vite) ---
+app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-if (!process.env.VERCEL) {
-  app.listen(PORT, () => {
-    console.log(`[SP4CE] Running on port ${PORT}`);
-    console.log(`[AUTH] Administrators Loaded: ${ADMIN_IDS.join(', ')}`);
-  });
-}
+// --- Inicia el servidor ---
+app.listen(PORT, () => {
+  console.log(`[SP4CE] 🚀 Servidor corriendo en el puerto ${PORT}`);
+  console.log(`[ADMINS] IDs de administradores: ${ADMIN_IDS.join(', ')}`);
+  console.log(`[SUPABASE] Conectado a: ${supabaseUrl}`);
+});
 
 export default app;
