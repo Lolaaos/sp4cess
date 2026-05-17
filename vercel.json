@@ -6,8 +6,7 @@
       "use": "@vercel/node",
       "config": {
         "memory": 1024,
-        "maxDuration": 15,
-        "zeroConfig": true
+        "maxDuration": 30
       }
     },
     {
