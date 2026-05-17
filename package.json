@@ -5,10 +5,9 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build",  // ✅ Solo compila el frontend
     "preview": "vite preview",
-    "start": "node server.js",
-    "server": "node server.js"
+    "start": "node server.js"  // ✅ Para desarrollo local
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
