@@ -6,8 +6,7 @@
       "use": "@vercel/node",
       "config": {
         "memory": 1024,
-        "maxDuration": 30,
-        "zeroConfig": true
+        "maxDuration": 30
       }
     },
     {
@@ -21,7 +20,10 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "api/index.js"
+      "dest": "api/index.js",
+      "headers": {
+        "Content-Type": "application/json"
+      }
     },
     {
       "src": "/auth/(.*)",
