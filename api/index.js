@@ -23,12 +23,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Middlewares
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
-app.use(cors({
-  origin: true,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie']
-}));
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
@@ -113,6 +108,7 @@ const isAdmin = (req, res, next) => {
 };
 
 // --- Rutas API ---
+
 // Products
 app.get('/api/products', async (req, res) => {
   try {
@@ -142,111 +138,4 @@ app.put('/api/products/:id', isAdmin, async (req, res) => {
     const { error } = await supabase.from('products').upsert(updatedProduct, { onConflict: 'id' });
     if (error) throw error;
     res.json(updatedProduct);
-  } catch (e) {
-    res.status(500).json({ error: 'Error al actualizar producto' });
-  }
-});
-
-app.delete('/api/products/:id', isAdmin, async (req, res) => {
-  try {
-    const { error } = await supabase.from('products').delete().eq('id', req.params.id);
-    if (error) throw error;
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: 'Error al eliminar producto' });
-  }
-});
-
-// Coupons
-app.get('/api/coupons', async (req, res) => {
-  try {
-    const { data, error } = await supabase.from('coupons').select('*');
-    if (error) throw error;
-    res.json(data || []);
-  } catch (e) {
-    res.status(500).json({ error: 'Error al obtener cupones' });
-  }
-});
-
-app.post('/api/coupons', isAdmin, async (req, res) => {
-  try {
-    const coupon = { id: Date.now(), ...req.body };
-    const { error } = await supabase.from('coupons').insert(coupon);
-    if (error) throw error;
-    res.status(201).json(coupon);
-  } catch (e) {
-    res.status(500).json({ error: 'Error al crear cupón' });
-  }
-});
-
-app.delete('/api/coupons/:id', isAdmin, async (req, res) => {
-  try {
-    const { error } = await supabase.from('coupons').delete().eq('id', req.params.id);
-    if (error) throw error;
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: 'Error al eliminar cupón' });
-  }
-});
-
-// Notifications
-app.get('/api/notifications', isAdmin, async (req, res) => {
-  try {
-    const { data, error } = await supabase.from('notifications').select('*');
-    if (error) throw error;
-    res.json(data || []);
-  } catch (e) {
-    res.status(500).json({ error: 'Error al obtener notificaciones' });
-  }
-});
-
-app.post('/api/notifications/:id/confirm', isAdmin, async (req, res) => {
-  try {
-    const notifId = Number(req.params.id);
-    const { data: notif, error } = await supabase
-      .from('notifications')
-      .select('*')
-      .eq('id', notifId)
-      .single();
-
-    if (error || !notif) {
-      return res.status(404).json({ error: 'Notificación no encontrada' });
-    }
-    if (notif.status === 'confirmed') {
-      return res.status(400).json({ error: 'La compra ya fue confirmada' });
-    }
-
-    const updatedNotif = {
-      ...notif,
-      status: 'confirmed',
-      confirmedAt: new Date().toISOString()
-    };
-    await supabase.from('notifications').upsert(updatedNotif, { onConflict: 'id' });
-
-    if (Array.isArray(notif.items)) {
-      const { data: products, error: prodError } = await supabase.from('products').select('*');
-      if (!prodError && products) {
-        for (const item of notif.items) {
-          const prod = products.find(p => String(p.id) === String(item.id));
-          if (prod) {
-            const currentStock = Number(prod.stock) || 0;
-            const qty = Number(item.qty) || 0;
-            const newStock = Math.max(0, currentStock - qty);
-            await supabase.from('products').upsert({ ...prod, stock: newStock }, { onConflict: 'id' });
-          }
-        }
-      }
-    }
-
-    res.json({ success: true, notification: updatedNotif });
-  } catch (e) {
-    res.status(500).json({ error: 'Error al confirmar notificación' });
-  }
-});
-
-app.delete('/api/notifications/:id', isAdmin, async (req, res) => {
-  try {
-    const { error } = await supabase.from('notifications').delete().eq('id', req.params.id);
-    if (error) throw error;
-    res.json({ success: true });
   } catch
